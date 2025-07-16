@@ -1,0 +1,30 @@
+# 阿里云百炼配置
+DASHSCOPE_API_KEY=your_dashscope_api_key_here
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/api/v1
+DASHSCOPE_MODEL_NAME=qwen-plus
+
+# 向量模型配置
+VECTOR_MODEL_NAME=text-embedding-v4
+VECTOR_MODEL_PROVIDER=dashscope
+
+# LangSmith配置
+LANGCHAIN_API_KEY=your_langsmith_api_key_here
+LANGCHAIN_PROJECT=barbellgpt
+LANGCHAIN_TRACING_V2=true
+
+# 向量数据库配置
+CHROMA_DB_PATH=./data/chroma_db
+
+# 应用配置
+DEBUG=True
+APP_PORT=8501
+APP_HOST=localhost
+
+# 日志配置
+LOG_LEVEL=INFO
+LOG_FILE=./logs/barbellgpt.log
+
+# RAG配置
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+TOP_K=5 
