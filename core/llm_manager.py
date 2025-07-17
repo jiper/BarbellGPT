@@ -8,8 +8,17 @@ import os
 from typing import List, Dict, Any, Optional, Union
 from loguru import logger
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from config import LANGCHAIN_API_KEY, LANGCHAIN_PROJECT, LANGCHAIN_TRACING_V2
+os.environ["LANGCHAIN_API_KEY"] = LANGCHAIN_API_KEY
+os.environ["LANGCHAIN_PROJECT"] = LANGCHAIN_PROJECT
+os.environ["LANGCHAIN_TRACING_V2"] = LANGCHAIN_TRACING_V2
+
 try:
-    from langchain_community.chat_models import ChatOpenAI
+    from langchain_openai import ChatOpenAI
     from langchain.schema import HumanMessage, SystemMessage, AIMessage
     from langchain.prompts import PromptTemplate
 except ImportError as e:
@@ -191,3 +200,9 @@ class LLMManager:
             logger.info("模型参数更新成功")
         except Exception as e:
             logger.error(f"更新模型参数失败: {e}") 
+
+
+if __name__ == "__main__":
+    llm_manager = LLMManager()
+    response = llm_manager.generate_response("你好，我是小爱同学，很高兴认识你。")
+    print(response)
