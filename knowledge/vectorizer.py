@@ -9,6 +9,10 @@ from typing import List, Dict, Any, Optional, Union
 import numpy as np
 from loguru import logger
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 try:
     from sentence_transformers import SentenceTransformer
     from langchain.schema import Document
@@ -80,9 +84,13 @@ class Vectorizer:
             
             if self.provider == "dashscope":
                 # 使用阿里云百炼API
-                response = self.model.call(text)
+                response = self.model.call(
+                    model = self.model_name,
+                    input = text,
+                    dimension = 1024,
+                    output_type = "dense&sparse")
                 if response.status_code == 200:
-                    embedding = np.array(response.output.embeddings[0].embedding)
+                    embedding = np.array(response.output['embeddings'][0]['embedding'])
                     return embedding
                 else:
                     logger.error(f"阿里云百炼API调用失败: {response.message}")
@@ -124,9 +132,13 @@ class Vectorizer:
                 # 阿里云百炼批量编码
                 embeddings = []
                 for text in valid_texts:
-                    response = self.model.call(text)
+                    response = self.model.call(
+                        model = self.model_name,
+                        input = text,
+                        dimension = 1024,
+                        output_type = "dense&sparse")
                     if response.status_code == 200:
-                        embedding = np.array(response.output.embeddings[0].embedding)
+                        embedding = np.array(response.output['embeddings'][0]['embedding'])
                         embeddings.append(embedding)
                     else:
                         logger.error(f"阿里云百炼API调用失败: {response.message}")
@@ -254,3 +266,13 @@ class Vectorizer:
             'embedding_dimension': self.get_embedding_dimension(),
             'max_seq_length': getattr(self.model, 'max_seq_length', 'unknown')
         } 
+    
+# 测试
+if __name__ == "__main__":
+    # 添加控制台输出
+    from loguru import logger
+    import sys
+    logger.add(sys.stderr, level="INFO")
+
+    vectorizer = Vectorizer()
+    print(vectorizer.get_model_info())

@@ -22,6 +22,14 @@ from core.retriever import HybridRetriever
 from core.llm_manager import LLMManager
 from knowledge.vectorizer import Vectorizer
 
+
+# 定义状态类型
+class AgentState:
+    def __init__(self, messages: List = None, context: str = "", response: str = ""):
+        self.messages = messages or []
+        self.context = context
+        self.response = response
+
 class RAGAgent:
     """RAG检索增强生成代理"""
     
@@ -53,13 +61,6 @@ class RAGAgent:
     def _build_workflow(self) -> StateGraph:
         """构建LangGraph工作流"""
         
-        # 定义状态类型
-        class AgentState:
-            def __init__(self, messages: List = None, context: str = "", response: str = ""):
-                self.messages = messages or []
-                self.context = context
-                self.response = response
-        
         # 创建状态图
         workflow = StateGraph(AgentState)
         
@@ -74,11 +75,20 @@ class RAGAgent:
         # 设置入口点
         workflow.set_entry_point("retrieve")
         
-        return workflow.compile()
+        return workflow.compile(return_type="object")
     
-    def _retrieve_node(self, state: Any) -> Dict[str, Any]:
+    def _retrieve_node(self, state: Any) -> AgentState:
         """检索节点：从知识库检索相关信息"""
         try:
+            # 调试：打印状态信息
+            print(f"DEBUG: state类型 = {type(state)}")
+            print(f"DEBUG: state.messages = {state.messages}")
+            print(f"DEBUG: messages长度 = {len(state.messages) if state.messages else 0}")
+            
+            if state.messages:
+                print(f"DEBUG: 最后一条消息 = {state.messages[-1]}")
+                print(f"DEBUG: 消息类型 = {type(state.messages[-1])}")
+                print(f"DEBUG: 消息内容 = {state.messages[-1].content}")
             # 获取最新的用户消息
             user_message = state.messages[-1].content if state.messages else ""
             
@@ -97,21 +107,22 @@ class RAGAgent:
             
             logger.info(f"检索完成，找到 {len(search_results)} 个相关文档")
             
-            return {
-                "messages": state.messages,
-                "context": context,
-                "response": ""
-            }
+            return AgentState(
+                messages=state.messages,
+                context=context,
+                response=""
+            )
             
         except Exception as e:
             logger.error(f"检索节点执行失败: {e}")
-            return {
-                "messages": state.messages,
-                "context": "检索失败，无法获取相关信息。",
-                "response": ""
-            }
+            return AgentState(
+                 messages=state.messages,
+                context = "检索失败，无法获取相关信息。",
+                response=""
+            )
     
-    def _generate_node(self, state: Any) -> Dict[str, Any]:
+    
+    def _generate_node(self, state: Any)  -> AgentState:
         """生成节点：基于检索结果生成回答"""
         try:
             user_message = state.messages[-1].content if state.messages else ""
@@ -128,19 +139,19 @@ class RAGAgent:
             
             logger.info("回答生成完成")
             
-            return {
-                "messages": state.messages,
-                "context": state.context,
-                "response": response
-            }
+            return AgentState(
+                messages = state.messages,
+                context =state.context,
+                response =response
+            )
             
         except Exception as e:
             logger.error(f"生成节点执行失败: {e}")
-            return {
-                "messages": state.messages,
-                "context": state.context,
-                "response": f"生成回答时发生错误: {str(e)}"
-            }
+            return AgentState(
+                messages = state.messages,
+                context = state.context,
+                response = f"生成回答时发生错误: {str(e)}"
+            )
     
     def _build_context(self, search_results: List[Dict[str, Any]]) -> str:
         """构建上下文信息"""
@@ -188,13 +199,11 @@ class RAGAgent:
             # 准备消息历史
             messages = conversation_history or []
             messages.append(HumanMessage(content=user_message))
+
+            state = AgentState(messages=messages, context="", response="")
             
             # 执行工作流
-            result = self.workflow.invoke({
-                "messages": messages,
-                "context": "",
-                "response": ""
-            })
+            result = self.workflow.invoke(state)
             
             return result["response"]
             
