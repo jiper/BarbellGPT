@@ -4,7 +4,7 @@ RAG代理
 基于LangGraph的检索增强生成代理，结合知识库和LLM提供智能回答。
 """
 
-from typing import List, Dict, Any, Optional
+from typing import TypedDict, List, Dict, Any, Optional
 import numpy as np
 from loguru import logger
 
@@ -24,11 +24,10 @@ from knowledge.vectorizer import Vectorizer
 
 
 # 定义状态类型
-class AgentState:
-    def __init__(self, messages: List = None, context: str = "", response: str = ""):
-        self.messages = messages or []
-        self.context = context
-        self.response = response
+class AgentState(TypedDict):
+    messages: List
+    context: str
+    response: str
 
 class RAGAgent:
     """RAG检索增强生成代理"""
@@ -61,7 +60,7 @@ class RAGAgent:
     def _build_workflow(self) -> StateGraph:
         """构建LangGraph工作流"""
         
-        # 创建状态图
+        # 使用 TypedDict 定义状态
         workflow = StateGraph(AgentState)
         
         # 添加节点
@@ -77,20 +76,12 @@ class RAGAgent:
         
         return workflow.compile()
     
-    def _retrieve_node(self, state: Any) -> AgentState:
+    def _retrieve_node(self, state: AgentState) -> AgentState:
         """检索节点：从知识库检索相关信息"""
         try:
-            # 调试：打印状态信息
-            print(f"DEBUG: state类型 = {type(state)}")
-            print(f"DEBUG: state.messages = {state.messages}")
-            print(f"DEBUG: messages长度 = {len(state.messages) if state.messages else 0}")
-            
-            if state.messages:
-                print(f"DEBUG: 最后一条消息 = {state.messages[-1]}")
-                print(f"DEBUG: 消息类型 = {type(state.messages[-1])}")
-                print(f"DEBUG: 消息内容 = {state.messages[-1].content}")
             # 获取最新的用户消息
-            user_message = state.messages[-1].content if state.messages else ""
+            messages = state.get("messages", [])
+            user_message = messages[-1].content if messages else ""
             
             # 向量化查询
             query_embedding = self.vectorizer.encode_text(user_message)
@@ -107,49 +98,52 @@ class RAGAgent:
             
             logger.info(f"检索完成，找到 {len(search_results)} 个相关文档")
             
+            # 返回 TypedDict
             return {
-                "messages": state.messages,
+                "messages": messages,
                 "context": context,
                 "response": ""
             }
-
+            
         except Exception as e:
             logger.error(f"检索节点执行失败: {e}")
             return {
-                    "messages": state.messages,
-                    "context": "检索失败，无法获取相关信息。",
-                    "response": ""
+                "messages": state.get("messages", []),
+                "context": "检索失败，无法获取相关信息。",
+                "response": ""
             }
     
     
-    def _generate_node(self, state: Any)  -> AgentState:
+    def _generate_node(self, state: AgentState) -> AgentState:
         """生成节点：基于检索结果生成回答"""
         try:
-            user_message = state.messages[-1].content if state.messages else ""
+            messages = state.get("messages", [])
+            user_message = messages[-1].content if messages else ""
             
             # 构建系统提示
-            system_prompt = self._build_system_prompt(state.context)
+            system_prompt = self._build_system_prompt(state.get("context", ""))
             
             # 生成回答
             response = self.llm_manager.generate_response(
                 prompt=user_message,
-                context=state.context,
+                context=state.get("context", ""),
                 system_message=system_prompt
             )
             
             logger.info("回答生成完成")
             
+            # 返回 TypedDict
             return {
-                "messages": state.messages,
-                "context": state.context,
+                "messages": messages,
+                "context": state.get("context", ""),
                 "response": response
             }
             
         except Exception as e:
             logger.error(f"生成节点执行失败: {e}")
             return {
-                "messages": state.messages,
-                "context": state.context,
+                "messages": state.get("messages", []),
+                "context": state.get("context", ""),
                 "response": f"生成回答时发生错误: {str(e)}"
             }
     
