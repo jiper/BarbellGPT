@@ -75,7 +75,7 @@ class RAGAgent:
         # 设置入口点
         workflow.set_entry_point("retrieve")
         
-        return workflow.compile(return_type="object")
+        return workflow.compile()
     
     def _retrieve_node(self, state: Any) -> AgentState:
         """检索节点：从知识库检索相关信息"""
@@ -107,19 +107,19 @@ class RAGAgent:
             
             logger.info(f"检索完成，找到 {len(search_results)} 个相关文档")
             
-            return AgentState(
-                messages=state.messages,
-                context=context,
-                response=""
-            )
-            
+            return {
+                "messages": state.messages,
+                "context": context,
+                "response": ""
+            }
+
         except Exception as e:
             logger.error(f"检索节点执行失败: {e}")
-            return AgentState(
-                 messages=state.messages,
-                context = "检索失败，无法获取相关信息。",
-                response=""
-            )
+            return {
+                    "messages": state.messages,
+                    "context": "检索失败，无法获取相关信息。",
+                    "response": ""
+            }
     
     
     def _generate_node(self, state: Any)  -> AgentState:
@@ -139,19 +139,19 @@ class RAGAgent:
             
             logger.info("回答生成完成")
             
-            return AgentState(
-                messages = state.messages,
-                context =state.context,
-                response =response
-            )
+            return {
+                "messages": state.messages,
+                "context": state.context,
+                "response": response
+            }
             
         except Exception as e:
             logger.error(f"生成节点执行失败: {e}")
-            return AgentState(
-                messages = state.messages,
-                context = state.context,
-                response = f"生成回答时发生错误: {str(e)}"
-            )
+            return {
+                "messages": state.messages,
+                "context": state.context,
+                "response": f"生成回答时发生错误: {str(e)}"
+            }
     
     def _build_context(self, search_results: List[Dict[str, Any]]) -> str:
         """构建上下文信息"""
@@ -200,10 +200,9 @@ class RAGAgent:
             messages = conversation_history or []
             messages.append(HumanMessage(content=user_message))
 
-            state = AgentState(messages=messages, context="", response="")
             
             # 执行工作流
-            result = self.workflow.invoke(state)
+            result = self.workflow.invoke({"messages": messages, "context": "", "response": ""})
             
             return result["response"]
             
