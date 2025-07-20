@@ -8,6 +8,9 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # 基础路径
 BASE_DIR = Path(__file__).parent
 DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
