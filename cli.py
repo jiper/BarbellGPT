@@ -59,24 +59,30 @@ class BarbellGPTCLI:
             return False
     
     def load_documents(self):
-        """加载文档到知识库"""
+        """加载文档到知识库（如知识库已有数据则跳过）"""
         try:
             print("\n📚 正在检查知识库...")
-            
-            # 检查是否有文档
+
+            # 读取当前向量库状态
+            info = self.rag_agent.get_agent_info()
+            doc_count = info.get("vector_store_info", {}).get("document_count", 0)
+
+            if doc_count > 0:
+                print(f"✅ 当前知识库已有 {doc_count} 条文档，跳过加载")
+                return
+
+            # 否则尝试加载文档文件
             loader = DocumentLoader()
             doc_info = loader.get_document_info()
-            
+
             if doc_info['supported_files'] > 0:
                 print(f"找到 {doc_info['supported_files']} 个文档")
-                
-                # 加载并处理文档
+
                 documents = loader.load_all_documents()
                 if documents:
                     processor = TextProcessor()
                     processed_docs = processor.process_documents(documents)
-                    
-                    # 添加到知识库
+
                     success = self.rag_agent.add_documents(processed_docs)
                     if success:
                         print(f"✅ 成功加载 {len(processed_docs)} 个文档到知识库")
@@ -87,7 +93,7 @@ class BarbellGPTCLI:
             else:
                 print("⚠️ 没有找到文档，将使用示例数据")
                 self._create_sample_data()
-                
+
         except Exception as e:
             print(f"❌ 加载文档失败: {e}")
             logger.error(f"加载文档失败: {e}")
