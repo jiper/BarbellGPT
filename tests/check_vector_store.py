@@ -7,7 +7,7 @@ from config import CHROMA_DB_PATH
 
 def check_vector_store():
     vector_store = ChromaVectorStore()
-    info = vector_store.get_collection_info()
+    info = vector_store.get_collection_info() 
 
     print(f"\n📁 检查路径: {CHROMA_DB_PATH}")
     print(f"📚 集合名: {info.get('collection_name', '未设置')}")

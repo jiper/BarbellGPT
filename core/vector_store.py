@@ -31,8 +31,7 @@ class ChromaVectorStore:
         """
         from config import CHROMA_DB_PATH
         
-        # self.db_path = db_path or CHROMA_DB_PATH
-        self.db_path = os.path.join(os.path.dirname(__file__), db_path or CHROMA_DB_PATH)
+        self.db_path = db_path or CHROMA_DB_PATH
         self.collection_name = collection_name
         
         # 确保数据库目录存在
