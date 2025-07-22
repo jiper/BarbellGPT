@@ -46,16 +46,13 @@ def process_user_input(user_input: str):
 
     history = cm.get_conversation_history(st.session_state.session_id, limit=10)
 
-    with st.chat_message("assistant"):
-        with st.spinner("🤔 正在思考..."):
-            try:
-                response = st.session_state.rag_agent.chat(user_input, history)
-                cm.add_message(st.session_state.session_id, response, is_user=False)
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-            except Exception as e:
-                st.error("处理失败: " + str(e))
-                logger.error(f"处理用户输入失败: {e}")
+    try:
+        response = st.session_state.rag_agent.chat(user_input, history)
+        cm.add_message(st.session_state.session_id, response, is_user=False)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+    except Exception as e:
+        st.error("处理失败: " + str(e))
+        logger.error(f"处理用户输入失败: {e}")
 
 
 # ------------------------
@@ -77,8 +74,8 @@ def render_chat_input():
 
 def render_main_panel():
     st.subheader("💬 与 BarbellGPT 对话")
+    render_chat_input()   # 👈 提前执行，确保当前轮消息渲染
     render_messages()
-    render_chat_input()
 
 
 # ------------------------
