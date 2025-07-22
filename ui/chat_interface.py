@@ -9,6 +9,10 @@ import uuid
 from typing import Optional
 from loguru import logger
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 from agents.rag_agent import RAGAgent
 from agents.conversation_manager import ConversationManager
 
@@ -123,6 +127,11 @@ class ChatInterface:
     
     def process_user_input(self, user_input: str):
         """处理用户输入"""
+        if self.rag_agent is None:
+            st.error("系统未初始化完成，请刷新页面或稍后再试。")
+            logger.error("RAGAgent 未初始化，无法处理用户输入。")
+            return
+
         try:
             # 添加用户消息到界面
             st.session_state.messages.append({"role": "user", "content": user_input})
@@ -160,10 +169,15 @@ class ChatInterface:
                     st.markdown(ai_response)
                     st.session_state.messages.append({"role": "assistant", "content": ai_response})
                     
-        except Exception as e:
-            error_msg = f"处理请求时发生错误: {str(e)}"
+        except (ValueError, RuntimeError, AttributeError) as e:
+            error_msg = f"处理请求时发生已知错误: {str(e)}"
             st.error(error_msg)
             logger.error(f"处理用户输入失败: {e}")
+        except Exception as e:  # 兜底，记录未知异常
+            # 仅用于捕获未预料的异常，便于日志追踪
+            error_msg = f"处理请求时发生未知错误: {str(e)}"
+            st.error(error_msg)
+            logger.error(f"未知异常: {e}")
     
     def render_chat_input(self):
         """渲染聊天输入框"""
