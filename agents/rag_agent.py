@@ -13,6 +13,8 @@ try:
     from langgraph.prebuilt import ToolNode
     from langchain.schema import Document
     from langchain_core.messages import HumanMessage, AIMessage
+    from typing import List
+    from langchain_core.messages import HumanMessage, ToolMessageChunk
 except ImportError as e:
     logger.error(f"导入langgraph模块失败: {e}")
     raise
@@ -65,7 +67,8 @@ class RAGAgent:
         
         # 添加节点
         workflow.add_node("retrieve", self._retrieve_node)
-        workflow.add_node("generate", self._generate_node)
+        workflow.add_node("generate", self._generate_node, is_streaming=True)
+
         
         # 设置边
         workflow.add_edge("retrieve", "generate")
@@ -114,38 +117,61 @@ class RAGAgent:
             }
     
     
+    # def _generate_node(self, state: AgentState) -> AgentState:
+    #     """生成节点：基于检索结果生成回答"""
+    #     try:
+    #         messages = state.get("messages", [])
+    #         user_message = messages[-1].content if messages else ""
+            
+    #         # 构建系统提示
+    #         system_prompt = self._build_system_prompt(state.get("context", ""))
+            
+    #         # 生成回答
+    #         response = self.llm_manager.generate_response(
+    #             prompt=user_message,
+    #             context=state.get("context", ""),
+    #             system_message=system_prompt
+    #         )
+            
+    #         logger.info("回答生成完成")
+            
+    #         # 返回 TypedDict
+    #         return {
+    #             "messages": messages,
+    #             "context": state.get("context", ""),
+    #             "response": response
+    #         }
+            
+    #     except Exception as e:
+    #         logger.error(f"生成节点执行失败: {e}")
+    #         return {
+    #             "messages": state.get("messages", []),
+    #             "context": state.get("context", ""),
+    #             "response": f"生成回答时发生错误: {str(e)}"
+    #         }
+
     def _generate_node(self, state: AgentState) -> AgentState:
         """生成节点：基于检索结果生成回答"""
         try:
             messages = state.get("messages", [])
             user_message = messages[-1].content if messages else ""
+            context = state.get("context", "")
             
             # 构建系统提示
-            system_prompt = self._build_system_prompt(state.get("context", ""))
-            
-            # 生成回答
-            response = self.llm_manager.generate_response(
+            system_prompt = self._build_system_prompt(context)
+
+            for chunk in self.llm_manager.stream_response(
                 prompt=user_message,
-                context=state.get("context", ""),
+                context=context,
                 system_message=system_prompt
-            )
+            ):
+                yield ToolMessageChunk(tool_call_id="rag", content=chunk)
             
-            logger.info("回答生成完成")
-            
-            # 返回 TypedDict
-            return {
-                "messages": messages,
-                "context": state.get("context", ""),
-                "response": response
-            }
             
         except Exception as e:
             logger.error(f"生成节点执行失败: {e}")
-            return {
-                "messages": state.get("messages", []),
-                "context": state.get("context", ""),
-                "response": f"生成回答时发生错误: {str(e)}"
-            }
+            yield ToolMessageChunk(tool_call_id="rag", content=f"❌ 生成失败: {str(e)}")
+
     
     def _build_context(self, search_results: List[Dict[str, Any]]) -> str:
         """构建上下文信息"""
@@ -203,6 +229,14 @@ class RAGAgent:
         except Exception as e:
             logger.error(f"对话执行失败: {e}")
             return f"抱歉，处理您的请求时发生错误: {str(e)}"
+
+    def chat_stream(self, user_message: str, conversation_history: List = None):
+        messages = conversation_history or []
+        messages.append(HumanMessage(content=user_message))
+        stream = self.workflow.stream({"messages": messages, "context": "", "response": ""})
+        for event in stream:
+            if isinstance(event, ToolMessageChunk):
+                yield event.content
     
     def add_documents(self, documents: List[Document]) -> bool:
         """

@@ -16,12 +16,11 @@ def init_state():
         st.session_state.session_id = str(uuid.uuid4())
 
     if "messages" not in st.session_state:
-        # ✅ 加入欢迎语
         st.session_state.messages = [{
             "role": "assistant",
             "content": "您好，我是 BarbellGPT 💪 力量举训练助手，有什么可以帮您？"
         }]
-        rerun_needed = True  # ✅ 插入后需刷新一次界面
+        rerun_needed = True
 
     if "agent_initialized" not in st.session_state:
         st.session_state.agent_initialized = False
@@ -37,28 +36,36 @@ def init_state():
             st.error(f"初始化失败: {e}")
             logger.error(f"RAG 初始化失败: {e}")
 
-    # ✅ 强制刷新，确保欢迎语立刻显示
     if rerun_needed:
         st.rerun()
 
 
 # ------------------------
-# 聊天输入处理
+# 聊天输入处理（流式输出）
 # ------------------------
-def process_user_input(user_input: str):
+def process_user_input_stream(user_input: str):
     st.session_state.messages.append({"role": "user", "content": user_input})
     cm = st.session_state.conversation_manager
     cm.add_message(st.session_state.session_id, user_input, is_user=True)
 
     history = cm.get_conversation_history(st.session_state.session_id, limit=10)
-    try:
-        response = st.session_state.rag_agent.chat(user_input, history)
-        cm.add_message(st.session_state.session_id, response, is_user=False)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-    except Exception as e:
-        err_msg = f"❌ 处理失败: {e}"
-        logger.error(err_msg)
-        st.session_state.messages.append({"role": "assistant", "content": err_msg})
+
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+        full_response = ""
+
+        try:
+            for chunk in st.session_state.rag_agent.chat_stream(user_input, history):
+                full_response += chunk
+                placeholder.markdown(full_response + "▌")
+        except Exception as e:
+            full_response = f"❌ 处理失败: {e}"
+            logger.error(full_response)
+        finally:
+            placeholder.markdown(full_response)
+
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
+    cm.add_message(st.session_state.session_id, full_response, is_user=False)
 
 
 # ------------------------
@@ -110,7 +117,7 @@ def render_sidebar():
             st.rerun()
 
         if st.button("🆕 新对话"):
-            st.session_state.session_id = str(uuid.uuid4())
+            st.session_id = str(uuid.uuid4())
             st.session_state.messages = [{
                 "role": "assistant",
                 "content": "您好，新会话已开启，请输入问题 💬"
@@ -166,13 +173,11 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # ✅ 仅此一处输入框，固定底部
     if prompt := st.chat_input("请输入你的问题..."):
         if st.session_state.agent_initialized:
-            process_user_input(prompt)
+            process_user_input_stream(prompt)
         else:
             st.warning("系统未就绪，请稍候...")
-    render_messages()
 
 
 # ------------------------

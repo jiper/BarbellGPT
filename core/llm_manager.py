@@ -54,12 +54,46 @@ class LLMManager:
                 openai_api_key=self.api_key,
                 openai_api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
                 temperature=0.7,
-                max_tokens=2000
+                max_tokens=2000,
+                streaming=True  # ✅ 打开流式
             )
             logger.info(f"LLM模型初始化成功: {self.model_name}")
         except Exception as e:
             logger.error(f"LLM模型初始化失败: {e}")
             self.llm = None
+
+
+    from typing import Generator
+
+    def stream_response(self, prompt: str, 
+                        context: Optional[str] = None,
+                        system_message: Optional[str] = None) -> Generator[str, None, None]:
+        """
+        逐块生成LLM响应，用于流式输出
+        """
+        if not self.llm:
+            yield "❌ LLM模型未初始化，无法生成响应"
+            return
+
+        try:
+            messages = []
+
+            if system_message:
+                messages.append(SystemMessage(content=system_message))
+            if context:
+                messages.append(SystemMessage(content=f"上下文信息:\n{context}"))
+
+            messages.append(HumanMessage(content=prompt))
+
+            # ✅ 流式调用（你确保 ChatOpenAI(streaming=True)）
+            for chunk in self.llm.stream(messages):
+                if chunk.content:
+                    yield chunk.content
+
+        except Exception as e:
+            yield f"❌ 生成响应时出错: {str(e)}"
+
+
     
     def generate_response(self, prompt: str, 
                          context: Optional[str] = None,
