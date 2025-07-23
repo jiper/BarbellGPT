@@ -1,9 +1,3 @@
-"""
-聊天界面
-
-基于Streamlit的聊天界面，提供用户友好的交互体验。
-"""
-
 import streamlit as st
 import uuid
 from loguru import logger
@@ -13,13 +7,22 @@ from agents.conversation_manager import ConversationManager
 
 
 # ------------------------
-# 状态初始化
+# 状态初始化（含首次 rerun）
 # ------------------------
 def init_state():
+    rerun_needed = False
+
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
+
     if "messages" not in st.session_state:
-        st.session_state.messages = []
+        # ✅ 加入欢迎语
+        st.session_state.messages = [{
+            "role": "assistant",
+            "content": "您好，我是 BarbellGPT 💪 力量举训练助手，有什么可以帮您？"
+        }]
+        rerun_needed = True  # ✅ 插入后需刷新一次界面
+
     if "agent_initialized" not in st.session_state:
         st.session_state.agent_initialized = False
 
@@ -34,47 +37,46 @@ def init_state():
             st.error(f"初始化失败: {e}")
             logger.error(f"RAG 初始化失败: {e}")
 
+    # ✅ 强制刷新，确保欢迎语立刻显示
+    if rerun_needed:
+        st.rerun()
+
 
 # ------------------------
 # 聊天输入处理
 # ------------------------
 def process_user_input(user_input: str):
     st.session_state.messages.append({"role": "user", "content": user_input})
-
     cm = st.session_state.conversation_manager
     cm.add_message(st.session_state.session_id, user_input, is_user=True)
 
     history = cm.get_conversation_history(st.session_state.session_id, limit=10)
-
     try:
         response = st.session_state.rag_agent.chat(user_input, history)
         cm.add_message(st.session_state.session_id, response, is_user=False)
         st.session_state.messages.append({"role": "assistant", "content": response})
     except Exception as e:
-        st.error("处理失败: " + str(e))
-        logger.error(f"处理用户输入失败: {e}")
+        err_msg = f"❌ 处理失败: {e}"
+        logger.error(err_msg)
+        st.session_state.messages.append({"role": "assistant", "content": err_msg})
 
 
 # ------------------------
-# 聊天消息渲染
+# 渲染聊天记录
 # ------------------------
 def render_messages():
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        role = msg.get("role")
+        content = msg.get("content")
+        if role in ("user", "assistant") and content:
+            with st.chat_message(role):
+                st.markdown(content)
 
 
-def render_chat_input():
-    if prompt := st.chat_input("请输入你的问题..."):
-        if not st.session_state.agent_initialized:
-            st.warning("系统未就绪，请稍候...")
-        else:
-            process_user_input(prompt)
-
-
+# ------------------------
+# 主面板（仅聊天记录）
+# ------------------------
 def render_main_panel():
-    st.subheader("💬 与 BarbellGPT 对话")
-    render_chat_input()   # 👈 提前执行，确保当前轮消息渲染
     render_messages()
 
 
@@ -100,13 +102,19 @@ def render_sidebar():
 
         st.subheader("💬 对话管理")
         if st.button("🗑 清空对话"):
-            st.session_state.messages = []
+            st.session_state.messages = [{
+                "role": "assistant",
+                "content": "您好，我是 BarbellGPT 💪 力量举训练助手，有什么可以帮您？"
+            }]
             st.session_state.conversation_manager.clear_conversation(st.session_state.session_id)
             st.rerun()
 
         if st.button("🆕 新对话"):
             st.session_state.session_id = str(uuid.uuid4())
-            st.session_state.messages = []
+            st.session_state.messages = [{
+                "role": "assistant",
+                "content": "您好，新会话已开启，请输入问题 💬"
+            }]
             st.rerun()
 
         if st.button("🔄 重新初始化"):
@@ -118,20 +126,19 @@ def render_sidebar():
         st.subheader("❓ 使用帮助")
         st.markdown("""
         **如何使用：**
-        1. 输入你的问题
-        2. 系统从知识库中检索相关信息
-        3. 基于检索结果生成专业回答
+        1. 在底部输入框输入你的问题
+        2. 系统自动检索知识库并生成回复
 
-        **支持的问题类型：**
+        **支持内容：**
         - 力量举训练技巧
-        - 动作要领指导
-        - 训练计划制定
-        - 安全注意事项
+        - 动作规范与纠错
+        - 周期计划设计
+        - 恢复策略与疲劳管理
         """)
 
 
 # ------------------------
-# 主入口
+# 页面主函数
 # ------------------------
 def main():
     st.set_page_config(
@@ -159,11 +166,18 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
+    # ✅ 仅此一处输入框，固定底部
+    if prompt := st.chat_input("请输入你的问题..."):
+        if st.session_state.agent_initialized:
+            process_user_input(prompt)
+        else:
+            st.warning("系统未就绪，请稍候...")
+    render_messages()
+
 
 # ------------------------
-# 对外统一接口（类封装）
+# 类封装接口
 # ------------------------
 class ChatInterface:
-    """对外保留类接口，兼容原有启动方式"""
     def run(self):
         main()
