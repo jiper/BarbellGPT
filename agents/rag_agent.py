@@ -67,7 +67,8 @@ class RAGAgent:
         
         # 添加节点
         workflow.add_node("retrieve", self._retrieve_node)
-        workflow.add_node("generate", self._generate_node, is_streaming=True)
+        # workflow.add_node("generate", self._generate_node_stream, is_streaming=True)
+        workflow.add_node("generate", self._generate_node)
 
         
         # 设置边
@@ -117,40 +118,40 @@ class RAGAgent:
             }
     
     
-    # def _generate_node(self, state: AgentState) -> AgentState:
-    #     """生成节点：基于检索结果生成回答"""
-    #     try:
-    #         messages = state.get("messages", [])
-    #         user_message = messages[-1].content if messages else ""
-            
-    #         # 构建系统提示
-    #         system_prompt = self._build_system_prompt(state.get("context", ""))
-            
-    #         # 生成回答
-    #         response = self.llm_manager.generate_response(
-    #             prompt=user_message,
-    #             context=state.get("context", ""),
-    #             system_message=system_prompt
-    #         )
-            
-    #         logger.info("回答生成完成")
-            
-    #         # 返回 TypedDict
-    #         return {
-    #             "messages": messages,
-    #             "context": state.get("context", ""),
-    #             "response": response
-    #         }
-            
-    #     except Exception as e:
-    #         logger.error(f"生成节点执行失败: {e}")
-    #         return {
-    #             "messages": state.get("messages", []),
-    #             "context": state.get("context", ""),
-    #             "response": f"生成回答时发生错误: {str(e)}"
-    #         }
-
     def _generate_node(self, state: AgentState) -> AgentState:
+        """生成节点：基于检索结果生成回答"""
+        try:
+            messages = state.get("messages", [])
+            user_message = messages[-1].content if messages else ""
+            
+            # 构建系统提示
+            system_prompt = self._build_system_prompt(state.get("context", ""))
+            
+            # 生成回答
+            response = self.llm_manager.generate_response(
+                prompt=user_message,
+                context=state.get("context", ""),
+                system_message=system_prompt
+            )
+            
+            logger.info("回答生成完成")
+            
+            # 返回 TypedDict
+            return {
+                "messages": messages,
+                "context": state.get("context", ""),
+                "response": response
+            }
+            
+        except Exception as e:
+            logger.error(f"生成节点执行失败: {e}")
+            return {
+                "messages": state.get("messages", []),
+                "context": state.get("context", ""),
+                "response": f"生成回答时发生错误: {str(e)}"
+            }
+
+    def _generate_node_stream(self, state: AgentState) -> AgentState:
         """生成节点：基于检索结果生成回答"""
         try:
             messages = state.get("messages", [])
