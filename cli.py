@@ -186,14 +186,22 @@ class BarbellGPTCLI:
             conversation_history = self.conversation_manager.get_conversation_history(
                 self.session_id, limit=10
             )
+            # 初始化响应收集器
+            full_response = ""
             
             # 生成AI回答
             print("\n🤖 AI助手: ", end="", flush=True)
-            ai_response = self.rag_agent.chat(user_input, conversation_history)
-            print(ai_response)
+
+            for chunk in self.rag_agent.chat_stream(user_input, conversation_history):
+                # print(chunk, end="", flush=True)
+                sys.stdout.write(chunk)
+                sys.stdout.flush()
+                full_response += chunk
+            # ai_response = self.rag_agent.chat_stream(user_input, conversation_history)
+            # print(ai_response)
             
-            # 添加AI消息到对话管理器
-            self.conversation_manager.add_message(self.session_id, ai_response, is_user=False)
+             # 保存 AI 消息
+            self.conversation_manager.add_message(self.session_id, full_response, is_user=False)
             
         except Exception as e:
             print(f"\n❌ 处理失败: {e}")

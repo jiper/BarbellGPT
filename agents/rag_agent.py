@@ -23,6 +23,7 @@ from core.vector_store import ChromaVectorStore
 from core.retriever import HybridRetriever
 from core.llm_manager import LLMManager
 from knowledge.vectorizer import Vectorizer
+from langgraph.prebuilt.tool_node import ToolNode
 
 
 # 定义状态类型
@@ -68,7 +69,12 @@ class RAGAgent:
         # 添加节点
         workflow.add_node("retrieve", self._retrieve_node)
         # workflow.add_node("generate", self._generate_node_stream, is_streaming=True)
-        workflow.add_node("generate", self._generate_node)
+        workflow.add_node(
+            "generate",
+            ToolNode(self._generate_node_stream),  # ✅ 包一层
+            is_streaming=True
+        )
+        # workflow.add_node("generate", self._generate_node)
 
         
         # 设置边
@@ -151,8 +157,10 @@ class RAGAgent:
                 "response": f"生成回答时发生错误: {str(e)}"
             }
 
-    def _generate_node_stream(self, state: AgentState) -> AgentState:
+    from typing import Generator, Union
+    def _generate_node_stream(self, state: AgentState) -> Generator[ToolMessageChunk, None, None]:
         """生成节点：基于检索结果生成回答"""
+        print("[DEBUG] 进入 generate_node_stream")
         try:
             messages = state.get("messages", [])
             user_message = messages[-1].content if messages else ""
@@ -166,6 +174,7 @@ class RAGAgent:
                 context=context,
                 system_message=system_prompt
             ):
+                print(f"[DEBUG] yield chunk: {chunk}")
                 yield ToolMessageChunk(tool_call_id="rag", content=chunk)
             
             
@@ -232,12 +241,26 @@ class RAGAgent:
             return f"抱歉，处理您的请求时发生错误: {str(e)}"
 
     def chat_stream(self, user_message: str, conversation_history: List = None):
-        messages = conversation_history or []
-        messages.append(HumanMessage(content=user_message))
-        stream = self.workflow.stream({"messages": messages, "context": "", "response": ""})
-        for event in stream:
-            if isinstance(event, ToolMessageChunk):
-                yield event.content
+        """
+        以流式方式逐步生成 AI 响应，支持 ToolMessageChunk 输出。
+        遇到异常时，输出错误提示信息。
+        """
+        try:
+            messages = conversation_history or []
+            messages.append(HumanMessage(content=user_message))
+            stream = self.workflow.stream({"messages": messages, "context": "", "response": ""})
+            for event in stream:
+                print(f"[STREAM EVENT] {repr(event)}")  # ✅ 加这句
+                if isinstance(event, ToolMessageChunk):
+                    yield event.content
+        except Exception as e:
+        # 打印或记录错误日志（建议配合 loguru 或 logging）
+            import traceback
+            error_msg = f"❌ 生成失败: {str(e)}"
+            print(traceback.format_exc())  # 或 logger.error(...)
+
+            # 仍然流式返回一条错误提示，避免 UI 崩溃
+            yield error_msg
     
     def add_documents(self, documents: List[Document]) -> bool:
         """
