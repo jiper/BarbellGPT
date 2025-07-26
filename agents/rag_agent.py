@@ -157,16 +157,15 @@ class RAGAgent:
                 "response": f"生成回答时发生错误: {str(e)}"
             }
 
-    from typing import Generator, Union
+    from typing import Generator
+    from langchain_core.messages import ToolMessageChunk
+
     def _generate_node_stream(self, state: AgentState) -> Generator[ToolMessageChunk, None, None]:
-        """生成节点：基于检索结果生成回答"""
-        print("[DEBUG] 进入 generate_node_stream")
-        try:
+        def stream_generator():
+            print("[DEBUG] inside generator")
             messages = state.get("messages", [])
             user_message = messages[-1].content if messages else ""
             context = state.get("context", "")
-            
-            # 构建系统提示
             system_prompt = self._build_system_prompt(context)
 
             for chunk in self.llm_manager.stream_response(
@@ -176,11 +175,9 @@ class RAGAgent:
             ):
                 print(f"[DEBUG] yield chunk: {chunk}")
                 yield ToolMessageChunk(tool_call_id="rag", content=chunk)
-            
-            
-        except Exception as e:
-            logger.error(f"生成节点执行失败: {e}")
-            yield ToolMessageChunk(tool_call_id="rag", content=f"❌ 生成失败: {str(e)}")
+
+        return stream_generator()  # ✅ 一定要调用！！
+
 
     
     def _build_context(self, search_results: List[Dict[str, Any]]) -> str:
