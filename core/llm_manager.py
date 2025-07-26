@@ -88,6 +88,7 @@ class LLMManager:
             # ✅ 流式调用（你确保 ChatOpenAI(streaming=True)）
             for chunk in self.llm.stream(messages):
                 if chunk.content:
+                    logger.info(f"llm trunk: {chunk.content}")
                     yield chunk.content
 
         except Exception as e:

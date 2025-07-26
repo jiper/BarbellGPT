@@ -61,31 +61,24 @@ class RAGAgent:
         logger.info("RAG代理初始化完成")
     
     def _build_workflow(self) -> StateGraph:
-        """构建LangGraph工作流"""
-        
-        # 使用 TypedDict 定义状态
         workflow = StateGraph(AgentState)
-        
-        # 添加节点
-        workflow.add_node("retrieve", self._retrieve_node)
-        # workflow.add_node("generate", self._generate_node_stream, is_streaming=True)
-        workflow.add_node(
-            "generate",
-            ToolNode(self._generate_node_stream),  # ✅ 包一层
-            is_streaming=True
-        )
-        # workflow.add_node("generate", self._generate_node)
 
-        
-        # 设置边
+        workflow.add_node("retrieve", self._retrieve_node)
+
+        def _wrapped_generate(state):
+            print("[DEBUG] ✅ generate node 确实执行了")
+            return self._generate_node_stream(state)
+
+        workflow.add_node("generate", _wrapped_generate, is_streaming=True)
+
         workflow.add_edge("retrieve", "generate")
         workflow.add_edge("generate", END)
-        
-        # 设置入口点
         workflow.set_entry_point("retrieve")
-        
+
         return workflow.compile()
+
     
+        
     def _retrieve_node(self, state: AgentState) -> AgentState:
         """检索节点：从知识库检索相关信息"""
         try:
@@ -158,25 +151,21 @@ class RAGAgent:
             }
 
     from typing import Generator
-    from langchain_core.messages import ToolMessageChunk
 
-    def _generate_node_stream(self, state: AgentState) -> Generator[ToolMessageChunk, None, None]:
-        def stream_generator():
-            print("[DEBUG] inside generator")
-            messages = state.get("messages", [])
-            user_message = messages[-1].content if messages else ""
-            context = state.get("context", "")
-            system_prompt = self._build_system_prompt(context)
+    def _generate_node_stream(self, state: AgentState):
+        messages = state.get("messages", [])
+        user_message = messages[-1].content if messages else ""
+        context = state.get("context", "")
+        system_prompt = self._build_system_prompt(context)
 
-            for chunk in self.llm_manager.stream_response(
-                prompt=user_message,
-                context=context,
-                system_message=system_prompt
-            ):
-                print(f"[DEBUG] yield chunk: {chunk}")
-                yield ToolMessageChunk(tool_call_id="rag", content=chunk)
+        for chunk in self.llm_manager.stream_response(
+            prompt=user_message,
+            context=context,
+            system_message=system_prompt
+        ):
+            yield {"response": chunk}  # 必须是 dict，不能是 ToolMessageChunk 等对象
 
-        return stream_generator()  # ✅ 一定要调用！！
+
 
 
     
@@ -238,26 +227,27 @@ class RAGAgent:
             return f"抱歉，处理您的请求时发生错误: {str(e)}"
 
     def chat_stream(self, user_message: str, conversation_history: List = None):
-        """
-        以流式方式逐步生成 AI 响应，支持 ToolMessageChunk 输出。
-        遇到异常时，输出错误提示信息。
-        """
         try:
             messages = conversation_history or []
             messages.append(HumanMessage(content=user_message))
-            stream = self.workflow.stream({"messages": messages, "context": "", "response": ""})
-            for event in stream:
-                print(f"[STREAM EVENT] {repr(event)}")  # ✅ 加这句
-                if isinstance(event, ToolMessageChunk):
-                    yield event.content
-        except Exception as e:
-        # 打印或记录错误日志（建议配合 loguru 或 logging）
-            import traceback
-            error_msg = f"❌ 生成失败: {str(e)}"
-            print(traceback.format_exc())  # 或 logger.error(...)
+            stream = self.workflow.stream({
+                "messages": messages,
+                "context": "",
+                "response": ""
+            })
 
-            # 仍然流式返回一条错误提示，避免 UI 崩溃
-            yield error_msg
+            for event in stream:
+                if event.get("type") == "tool":
+                    output = event.get("output", {})
+                    if isinstance(output, dict) and "response" in output:
+                        yield output["response"]
+
+        except Exception as e:
+            import traceback
+            yield f"❌ 生成失败: {str(e)}"
+            print(traceback.format_exc())
+
+
     
     def add_documents(self, documents: List[Document]) -> bool:
         """
